@@ -96,7 +96,7 @@ func newDb(f string, cfg *Config) (*Db, error) {
 			return nil, err
 		}
 	}
-	db.fv, err = os.OpenFile(f, os.O_CREATE|os.O_RDWR, os.FileMode(cfg.FileMode))
+	db.fv, err = os.OpenFile(f, os.O_CREATE|os.O_RDWR, os.FileMode(cfg.FileMode)) // 持久化value的文件
 	if err != nil {
 		return nil, err
 	}
@@ -111,7 +111,7 @@ func newDb(f string, cfg *Config) (*Db, error) {
 	for buf.Len() > 0 {
 		_ = uint8(buf.Next(1)[0]) // format version
 		t := uint8(buf.Next(1)[0])
-		seek := binary.BigEndian.Uint32(buf.Next(4))
+
 		size := binary.BigEndian.Uint32(buf.Next(4))
 		_ = buf.Next(4) // time
 		sizeKey := int(binary.BigEndian.Uint16(buf.Next(2)))
@@ -194,9 +194,9 @@ func (db *Db) lessBianry(i, j int) bool {
 
 //found return binary search result with sort order
 func (db *Db) found(b []byte, asc bool) int {
-	db.sort()
+	db.sort() // 对keys [][]byte 进行排序，之后可以使用sort.Search 二分法查找值
 
-	return sort.Search(len(db.keys), func(i int) bool {
+	return sort.Search(len(db.keys), func(i int) bool { //二分法从keys中查找是否有b这个key，所以keys是有序的
 		return bytes.Compare(db.keys[i], b) >= 0
 	})
 
@@ -211,10 +211,10 @@ func KeyToBinary(v interface{}) ([]byte, error) {
 		return v.([]byte), nil
 	case bool, float32, float64, complex64, complex128, int8, int16, int32, int64, uint, uint8, uint16, uint32, uint64:
 		buf := new(bytes.Buffer)
-		err = binary.Write(buf, binary.BigEndian, v)
+		err = binary.Write(buf, binary.BigEndian, v) // 大端方式序列化
 		return buf.Bytes(), err
 	case int:
-		val := uint64(v.(int))
+		val := uint64(v.(int)) // 不断的移位操作用这种方式的原因是什么?
 		p := make([]byte, 8)
 		p[0] = byte(val >> 56)
 		p[1] = byte(val >> 48)
@@ -227,14 +227,14 @@ func KeyToBinary(v interface{}) ([]byte, error) {
 		return p, err
 	case string:
 		return []byte(v.(string)), nil
-	default:
+	default: // 如果是更复杂的类型  直接用gob序列化，其实也可以全部类型直接用gob序列化 但是也许性能就降低了
 		buf := new(bytes.Buffer)
 		err = gob.NewEncoder(buf).Encode(v)
 		return buf.Bytes(), err
 	}
 }
 
-// ValToBinary return value in bytes
+// ValToBinary return value in bytes value的序列化直接用了gob，没有像key那样进行多种判断，如果用比gob性能更好的进行序列化，性能应该会有提高
 func ValToBianry(v interface{}) ([]byte, error) {
 	var err error
 	switch v.(type) {
@@ -262,7 +262,7 @@ func writeKeyVal(fk, fv *os.File, readKey, writeVal []byte, exists bool, oldCmd 
 			_, _, err = writeAtPos(fv, writeVal, int64(oldCmd.Seek))
 		} else {
 			//write at new seek (at the end of file)
-			seek, _, err = writeAtPos(fv, writeVal, int64(-1))
+			seek, _, err = writeAtPos(fv, writeVal, int64(-1)) // 从-1的seek开始写入
 			cmd.Seek = uint32(seek)
 		}
 		if err == nil {
@@ -292,7 +292,7 @@ func writeAtPos(f *os.File, b []byte, pos int64) (seek int64, n int, err error) 
 			return seek, 0, err
 		}
 	}
-	n, err = f.WriteAt(b, seek)
+	n, err = f.WriteAt(b, seek) // seek, err = f.Seek(0, 2)
 	if err != nil {
 		return seek, n, err
 	}

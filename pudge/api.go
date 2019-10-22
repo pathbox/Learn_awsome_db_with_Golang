@@ -39,7 +39,7 @@ func Open(f string, cfg *Config) (*Db, error) {
 	return db, err
 }
 
-// Set store any key value to db
+// Set store any key value to db  key value 是接口值类型
 func (db *Db) Set(key, value interface{}) error {
 	db.Lock()
 	defer db.Unlock()
@@ -54,7 +54,7 @@ func (db *Db) Set(key, value interface{}) error {
 	//log.Println("Set:", k, v)
 	oldCmd, exists := db.vals[string(k)]
 	//fmt.Println("StoreMode", db.config.StoreMode)
-	if db.storemode == 2 {
+	if db.storemode == 2 { //该模式val值只存在内存 不持久化
 		cmd := &Cmd{}
 		cmd.Size = uint32(len(v))
 		cmd.Val = make([]byte, len(v))
@@ -83,7 +83,7 @@ func (db *Db) Get(key, value interface{}) error {
 	if err != nil {
 		return err
 	}
-	if val, ok := db.vals[string(k)]; ok {
+	if val, ok := db.vals[string(k)]; ok { // vals的可以是字符串形式 需要将byte转为string
 		switch value.(type) {
 		case *[]byte:
 			b := make([]byte, val.Size)
@@ -95,7 +95,7 @@ func (db *Db) Get(key, value interface{}) error {
 					return err
 				}
 			}
-			*value.(*[]byte) = b
+			*value.(*[]byte) = b // value值 以指针方式操作 并且强转为[]byte类型 直接修改value值为得到的值，所以传入的value应该为[]byte， 之后再json序列化得到struct， 没有用return返回值的方式，不知道这样是否速度更快？可以benchmark测一个
 			return nil
 		default:
 
@@ -103,7 +103,7 @@ func (db *Db) Get(key, value interface{}) error {
 			b := make([]byte, val.Size)
 			if db.storemode == 2 {
 				//fmt.Println(val)
-				copy(b, val.Val)
+				copy(b, val.Val) // 操作 []byte
 			} else {
 				_, err := db.fv.ReadAt(b, int64(val.Seek))
 				if err != nil {
@@ -122,7 +122,7 @@ func (db *Db) Get(key, value interface{}) error {
 // Return error if any.
 func (db *Db) Close() error {
 	if db.cancelSyncer != nil {
-		db.cancelSyncer()
+		db.cancelSyncer() // 取消同步
 	}
 	db.Lock()
 	defer db.Unlock()
@@ -135,7 +135,7 @@ func (db *Db) Close() error {
 
 		db.storemode = 0
 		for _, k := range keys {
-			if val, ok := db.vals[string(k)]; ok {
+			if val, ok := db.vals[string(k)]; ok { // 把内存中的所有值持久化
 				writeKeyVal(db.fk, db.fv, k, val.Val, false, nil)
 			}
 		}
@@ -145,7 +145,7 @@ func (db *Db) Close() error {
 		if err != nil {
 			return err
 		}
-		err = db.fk.Close()
+		err = db.fk.Close()// 关闭文件句柄
 		if err != nil {
 			return err
 		}
@@ -163,7 +163,7 @@ func (db *Db) Close() error {
 	}
 
 	dbs.Lock()
-	delete(dbs.dbs, db.name)
+	delete(dbs.dbs, db.name) // 将数据库从全局dbsmap中删除
 	dbs.Unlock()
 	return nil
 }
@@ -188,7 +188,7 @@ func (db *Db) DeleteFile() error {
 	return DeleteFile(db.name)
 }
 
-// DeleteFile close db and delete file
+// DeleteFile close db and delete file 删掉持久化的文件
 func DeleteFile(file string) error {
 	if file == "" {
 		return nil
@@ -376,6 +376,7 @@ func (db *Db) Counter(key interface{}, incr int) (int64, error) {
 	return counter, err
 }
 
+// 开放给外部的接口----------------------------------------
 // Set store any key value to db with opening if needed
 func Set(f string, key, value interface{}) error {
 	db, err := Open(f, nil)
